@@ -775,26 +775,38 @@ function loadScript(src) {
   });
 }
 
-// Einen Spieler sicher in Firebase speichern
-// Scores werden als nummeriertes Object gespeichert (kein null-Problem)
-async function fbSavePlayer(player) {
-  if(!player||!player.id) return;
-  const payload = {
-    id:       player.id,
-    name:     player.name,
-    handicap: player.handicap!=null ? player.handicap : 0,
-    scores:   scoresToFb(player.scores||Array(18).fill(null))
-  };
-  await window._fbSet('players/'+player.id, payload);
+// Alle Spieler ATOMAR in Firebase schreiben (ersetzt den gesamten players-Knoten).
+// Dadurch werden gelöschte Spieler tatsächlich entfernt und es gibt keine Null-Array-Probleme.
+function buildPlayersPayload(players) {
+  const obj = {};
+  (players||[]).forEach(p => {
+    if(!p||!p.id) return;
+    obj[p.id] = {
+      id:       p.id,
+      name:     p.name,
+      handicap: p.handicap!=null ? p.handicap : 0,
+      scores:   scoresToFb(p.scores||Array(18).fill(null))
+    };
+  });
+  return obj;
 }
 
 async function fbSaveAllPlayers(players) {
-  await Promise.all((players||[]).map(p=>fbSavePlayer(p)));
+  // Schreibt den gesamten players-Knoten neu → löscht automatisch nicht mehr vorhandene Spieler
+  await window._fbSet('players', buildPlayersPayload(players));
 }
 
 async function fbSaveCurrentPlayer() {
+  // Beim Speichern eines einzelnen Scores: nur diesen Spieler-Knoten aktualisieren
   const p = state.players.find(p=>p.id===CID);
-  if(p) await fbSavePlayer({...p, scores:[...CSCORES]});
+  if(!p) return;
+  const payload = {
+    id:       p.id,
+    name:     p.name,
+    handicap: p.handicap!=null ? p.handicap : 0,
+    scores:   scoresToFb([...CSCORES])
+  };
+  await window._fbSet('players/'+p.id, payload);
 }
 
 // Firebase-Spielerobjekt → sauberes Objekt mit korrekten Scores
